@@ -57,8 +57,8 @@ void setup() {
 
   // Timer 0
   TCCR0A = (1 << WGM01);
-  TCCR0B = ((1 << CS02) | (1 << CS00));
-  OCR0A = 1;
+  TCCR0B = (1 << CS02);
+  OCR0A = 31;
   TIMSK0 |= (1 << OCIE0A);
 
   // Timer 1 - 4MHz, Duty cycle 50%
@@ -72,7 +72,6 @@ void setup() {
   
   interrupts();
   clockInDotCorrection();
-  
 }
 
 void pulse(int pin){
@@ -102,7 +101,6 @@ void clockInDotCorrection() {
 }
 
 int xlatNeedsPulse = 0;
-
 ISR(TIMER0_COMPA_vect) {
   digitalWrite(BLANK, HIGH);
   
@@ -172,8 +170,9 @@ void setGs(int row, int channel, uint16_t value) {
 
 int16_t count = 0;
 uint16_t level [12] = {
- // 0, 3, 5, 8, 10, 11, 12, 11, 10, 8, 6, 3
-  3, 6, 12, 12,  6, 3, 3, 6, 12, 12,  6, 3, 
+  0, 3, 5, 8, 10, 11, 12, 11, 10, 8, 6, 3
+ // 3, 6, 12, 12,  6, 3, 3, 6, 12, 12,  6, 3, 
+ // 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
 };
 
 int brightness = 0;
@@ -183,7 +182,7 @@ int8_t factor = 10;
 
 void loop (){
   
-  if(count < 3000){
+  if(count < 10000){
     count++;
     return;
   } else {
