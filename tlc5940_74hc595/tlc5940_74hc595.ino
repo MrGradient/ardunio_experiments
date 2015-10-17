@@ -19,7 +19,7 @@ volatile uint8_t row = 2;
 const int DC = B00111111;
 
 int dcData[12 * N_TLC] = {0};
-int gsData[ROWS][24 * N_TLC] = {0};
+int gsData[8][24 * N_TLC] = {0};
 
 void setup() {
   noInterrupts();
@@ -113,21 +113,18 @@ ISR(TIMER0_COMPA_vect) {
   if (xlatNeedsPulse == 1) {
     pulse(XLAT);    
     xlatNeedsPulse = 0;
-    
     selectRow(row);
     row++;
-    if(row == 8) row = 2;
+    if(row == 8) row = 0;
   }
   
   digitalWrite(BLANK, LOW);
 
-  if(1 == 1){
+  if(1 == 1){  
     for(int i = 0; i < N_TLC * 24; i++){
       SPDR = gsData[row][i];
-    // Wait for transmission complete
       while (!(SPSR & (1 << SPIF)));
     }
-    
     xlatNeedsPulse = 1;
     gsUpdateFlag = 0;
   }
@@ -176,7 +173,7 @@ void setGs(int row, int channel, uint16_t value) {
 int16_t count = 0;
 uint16_t level [12] = {
  // 0, 3, 5, 8, 10, 11, 12, 11, 10, 8, 6, 3
-  0, 0, 0, 0,  0, 0, 3, 6, 12, 12,  6, 3, 
+  3, 6, 12, 12,  6, 3, 3, 6, 12, 12,  6, 3, 
 };
 
 int brightness = 0;
@@ -186,7 +183,7 @@ int8_t factor = 10;
 
 void loop (){
   
-  if(count < 2000){
+  if(count < 3000){
     count++;
     return;
   } else {
@@ -209,5 +206,4 @@ void loop (){
     //setGs(i, brightness);
   }
   setGsUpdateFlag();
-
 }
