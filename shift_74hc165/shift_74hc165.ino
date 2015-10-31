@@ -8,14 +8,19 @@ void setup() {
   while (!Serial) {}
   Serial.println("Setup begin");
 
+  pinMode(10, OUTPUT);
+  digitalWrite(10, HIGH);
+
   pinMode(SOUT, INPUT);
   pinMode(CLK, OUTPUT);
   pinMode(LD, OUTPUT);
   Serial.println("Pin mode set done");
-
-  digitalWrite(CLK, HIGH);
+  
   digitalWrite(LD, HIGH);
   Serial.println("Pin level set");
+
+  SPCR = (1 << SPE) | (1 << MSTR);
+  SPSR = (1 << SPI2X);
   Serial.println("Setup done");
   
   interrupts();
@@ -29,18 +34,12 @@ void pulse(int pin){
 
 void loop() {
 
-  pulse(LD);
-  
   Serial.println("----");
-  uint8_t data = 0x00;
-  for(uint8_t i = 0; i < 8; i++){
-    uint8_t in = digitalRead(SOUT);
-    Serial.print(in);
-    data |= (in << i);
-    pulse(CLK);
-  }
-  Serial.println();
+  pulse(LD);
+  SPDR = 0;
+  while (!(SPSR & (1<<SPIF)));
+  uint8_t data = SPDR; 
   Serial.println(data, BIN);
-  delay(1000);
 
+  delay(1000);
 }
