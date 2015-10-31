@@ -134,7 +134,7 @@ void selectRow(uint8_t r){
   while (!(SPSR & (1 << SPIF))){};
   digitalWrite(RCK, HIGH);
 }
-
+1
 void setAllDc(uint8_t value) {
   uint8_t tmp1 = (uint8_t)(value << 2);
   uint8_t tmp2 = (uint8_t)(tmp1 << 2);
@@ -171,8 +171,8 @@ void setGs(int row, int channel, uint16_t value) {
 int16_t count = 0;
 uint16_t level [12] = {
   0, 3, 5, 8, 10, 11, 12, 11, 10, 8, 6, 3
- // 3, 6, 12, 12,  6, 3, 3, 6, 12, 12,  6, 3, 
- // 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+  //3, 6, 12, 12,  6, 3, 3, 6, 12, 12,  6, 3, 
+ // 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 0,
 };
 
 int brightness = 0;
@@ -182,7 +182,7 @@ int8_t factor = 10;
 
 void loop (){
   
-  if(count < 10000){
+  if(count < 20000){
     count++;
     return;
   } else {
@@ -201,7 +201,7 @@ void loop (){
     
     setGs(i, 4, (1L << level[i - R_OFF]) - 1);
     setGs(i, 5, (1L << level[11 - (i - R_OFF)]) - 1);
-    
+
     //setGs(i, brightness);
   }
   setGsUpdateFlag();
