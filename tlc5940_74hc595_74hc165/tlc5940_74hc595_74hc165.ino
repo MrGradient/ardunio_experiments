@@ -185,7 +185,7 @@ ISR(TIMER2_COMPA_vect) {
       setGs(i + R_OFF, 6, 0);
     }
   }
-  if(wait < 50){
+  if(wait < 30){
     wait ++;
   } else{
     wait = 0;
@@ -272,7 +272,7 @@ void loop (){
 
   while(up != 1);
 
-  for(uint8_t i = 0; i < ROWS - 1; i++){
+  for(uint8_t i = 0; i < ROWS - 2; i++){
     colors[i][0] = colors[i+1][0];
     colors[i][1] = colors[i+1][1];
     colors[i][2] = colors[i+1][2];
@@ -282,6 +282,9 @@ void loop (){
   hsi2rgb(hue, 1.0F, 1.0F, rgb);
   //hsi2rgb(0.0F, 0.0F, 1.0F, rgb);
 
+  colors[4][0] = rgb[0];
+  colors[4][1] = rgb[1];
+  colors[4][2] = rgb[2];
   colors[5][0] = rgb[0];
   colors[5][1] = rgb[1];
   colors[5][2] = rgb[2];
