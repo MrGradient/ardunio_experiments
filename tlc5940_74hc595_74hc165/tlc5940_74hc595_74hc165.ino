@@ -18,15 +18,27 @@
 #define SOUT   12
 #define LD      2
 
-#define R_OFF 2
+#define R_OFF 0
+
+uint16_t wait = 0;
+uint16_t hue = 0;
+volatile int8_t up = 0;
 
 volatile uint8_t gsUpdateFlag;
-volatile uint8_t row = 2;
+volatile uint8_t row = 0;
 
 const int DC = B00111111;
 
 int dcData[12 * N_TLC] = {0};
 int gsData[8][24 * N_TLC] = {0};
+
+uint16_t red = 0;
+uint16_t green = 0;
+uint16_t blue = 0; 
+
+uint16_t colors[ROWS][3] = {0};
+
+uint8_t MAX = 12;
 
 void setup() {
   noInterrupts();
@@ -82,7 +94,7 @@ void setup() {
 
   // Timer 2
   TCCR2A |= (1 << WGM21); // Configure timer 2 for CTC mode
-  TCCR2B |= ((1 << CS22) | (1 << CS21) | (1 << CS20)); // Start timer at Fcpu/64
+  TCCR2B |= ((1 << CS22) | (1 << CS21) | (1 << CS22)); // Start timer at Fcpu/64
   TIMSK2 |= (1 << OCIE2A); // Enable CTC interrupt
   OCR2A   = 249; 
 
@@ -110,7 +122,9 @@ void clockInDotCorrection() {
   digitalWrite(DCPRG, HIGH);
   digitalWrite(VPRG, HIGH);
   
-  setAllDc(DC);
+  setDc(4, 0b00111111); // rot
+  setDc(5, 0b00111111); // gruen
+  setDc(6, 0b00111111); // blau
 
   for(int i = 0; i < 12 * N_TLC; i++){
     SPDR = dcData[i];
@@ -150,26 +164,33 @@ ISR(TIMER0_COMPA_vect) {
 } 
 
 ISR(TIMER2_COMPA_vect) {
+
   pulseInv(LD);
   SPDR = 0x00;
   while (!(SPSR & (1 << SPIF))){};
   uint8_t data = SPDR;
-  Serial.println(data, BIN);
-
+  
   while(gsUpdateFlag);
 
   for(int i = 0; i < 6; i++){
     uint8_t a = (data >> i) & 0x01;
+    
     if(a == 1){
-      setGs(i + R_OFF, 4, (1L<<12) - 1);
-      setGs(i + R_OFF, 5, (1L<<12) - 1);
+      setGs(i + R_OFF, 4, colors[i][0] );
+      setGs(i + R_OFF, 5, colors[i][1] );
+      setGs(i + R_OFF, 6, colors[i][2] );
+    }else {
+      setGs(i + R_OFF, 4, 0);
+      setGs(i + R_OFF, 5, 0);
+      setGs(i + R_OFF, 6, 0);
     }
   }
-  setGsUpdateFlag();
-//  for(int i = R_OFF; i < ROWS + R_OFF; i++){
-//    setGs(i, 4, (1L << level[i - R_OFF]) - 1);
-//    setGs(i, 5, (1L << level[11 - (i - R_OFF)]) - 1);
-//  }
+  if(wait < 50){
+    wait ++;
+  } else{
+    wait = 0;
+    up = 1;
+  }
 }
 
 void selectRow(uint8_t r){
@@ -179,21 +200,28 @@ void selectRow(uint8_t r){
   digitalWrite(RCK, HIGH);
 }
 
-void setAllDc(uint8_t value) {
-  uint8_t tmp1 = (uint8_t)(value << 2);
-  uint8_t tmp2 = (uint8_t)(tmp1 << 2);
-  uint8_t tmp3 = (uint8_t)(tmp2 << 2);
-  tmp1 |= (value >> 4);
-  tmp2 |= (value >> 2);
-  tmp3 |= value;
-  uint8_t i = 0;
-  do {
-    dcData[i++] = tmp1; // bits: 05 04 03 02 01 00 05 04
-    dcData[i++] = tmp2; // bits: 03 02 01 00 05 04 03 02
-    dcData[i++] = tmp3; // bits: 01 00 05 04 03 02 01 00
-  } while (i < 12 * N_TLC);
-} 
-
+void setDc(uint8_t channel, uint8_t value) {
+  channel = (16 * N_TLC) - 1 - channel;
+  uint16_t i = (uint16_t)channel * 3 / 4;
+  switch (channel % 4) {
+    case 0:
+      dcData[i] = (dcData[i] & 0x03) | (uint8_t)(value << 2);
+      break;
+    case 1:
+      dcData[i] = (dcData[i] & 0xFC) | (value >> 4);
+      i++;
+      dcData[i] = (dcData[i] & 0x0F) | (uint8_t)(value << 4);
+      break;
+    case 2:
+      dcData[i] = (dcData[i] & 0xF0) | (value >> 2);
+      i++;
+      dcData[i] = (dcData[i] & 0x3F) | (uint8_t)(value << 6);
+      break;
+    default: // case 3:
+      dcData[i] = (dcData[i] & 0xC0) | (value);
+      break;
+  }
+}
 
 void setGs(int row, int channel, uint16_t value) {
   channel = (16 * N_TLC) - 1 - channel;
@@ -212,26 +240,56 @@ void setGs(int row, int channel, uint16_t value) {
   }
 }
 
-int16_t count = 0;
-uint16_t level [12] = {
-  0, 3, 5, 8, 10, 11, 12, 11, 10, 8, 6, 3
-  //3, 6, 12, 12,  6, 3, 3, 6, 12, 12,  6, 3, 
- // 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 0,
-};
-
-int brightness = 0;
-int8_t factor = 10;
-
-#define R_OFF 2
+void hsi2rgb(float H, float S, float I, int* rgb) {
+  int r, g, b;
+  H = fmod(H,360); // cycle H around to 0-360 degrees
+  H = 3.14159*H/(float)180; // Convert to radians.
+  S = S>0?(S<1?S:1):0; // clamp S and I to interval [0,1]
+  I = I>0?(I<1?I:1):0;
+    
+  // Math! Thanks in part to Kyle Miller.
+  if(H < 2.09439) {
+    r = 255*I/3*(1+S*cos(H)/cos(1.047196667-H));
+    g = 255*I/3*(1+S*(1-cos(H)/cos(1.047196667-H)));
+    b = 255*I/3*(1-S);
+  } else if(H < 4.188787) {
+    H = H - 2.09439;
+    g = 255*I/3*(1+S*cos(H)/cos(1.047196667-H));
+    b = 255*I/3*(1+S*(1-cos(H)/cos(1.047196667-H)));
+    r = 255*I/3*(1-S);
+  } else {
+    H = H - 4.188787;
+    b = 255*I/3*(1+S*cos(H)/cos(1.047196667-H));
+    r = 255*I/3*(1+S*(1-cos(H)/cos(1.047196667-H)));
+    g = 255*I/3*(1-S);
+  }
+  rgb[0]=r;
+  rgb[1]=g;
+  rgb[2]=b;
+}
 
 void loop (){
-//  while(gsUpdateFlag);
-//  for(int i = R_OFF; i < ROWS + R_OFF; i++){
-//    
-//    setGs(i, 4, (1L << level[i - R_OFF]) - 1);
-//    setGs(i, 5, (1L << level[11 - (i - R_OFF)]) - 1);
-//
-//    //setGs(i, brightness);
-//  }
-//  setGsUpdateFlag();
+
+  while(up != 1);
+
+  for(uint8_t i = 0; i < ROWS - 1; i++){
+    colors[i][0] = colors[i+1][0];
+    colors[i][1] = colors[i+1][1];
+    colors[i][2] = colors[i+1][2];
+  }
+
+  int rgb[3];
+  hsi2rgb(hue, 1.0F, 1.0F, rgb);
+  //hsi2rgb(0.0F, 0.0F, 1.0F, rgb);
+
+  colors[5][0] = rgb[0];
+  colors[5][1] = rgb[1];
+  colors[5][2] = rgb[2];
+  hue+=6;
+  if(hue > 360){
+    hue = 0;
+  }
+  up = 0;
 }
+
+
